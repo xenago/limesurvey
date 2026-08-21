@@ -69,9 +69,9 @@ def short_circuit():
     """Stop the container with an error code
     """
     try:
-        # Send SIGILL (4) to PID 1 (tini) so the container exits immediately with code 132
+        # Send SIGKILL (9) to PID 1 (tini) so the container exits immediately with code 137
         # https://github.com/PyCQA/bandit/issues/333
-        process = subprocess.Popen(["kill", "-4", "1"])  # nosec
+        process = subprocess.Popen(["kill", "-9", "1"])  # nosec
         process.wait()
     except Exception as e:
         print(f"Fatal error on exit: {str(e)}")

@@ -46,7 +46,7 @@ jobs:
       packages: write  # push image blobs by digest (tag builds only)
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         # full history required for the on-main check before a push
         with:
           fetch-depth: 0
@@ -70,18 +70,18 @@ jobs:
           echo "Tag ${GITHUB_REF_NAME} is contained in main."
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Docker labels
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
       # PR / manual run: build the arch to confirm it compiles, without pushing.
       - name: Build (validate only)
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: ${{ matrix.platform }}
@@ -92,7 +92,7 @@ jobs:
 
       - name: Log in to registry
         if: startsWith(github.ref, 'refs/tags/')
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -102,7 +102,7 @@ jobs:
       - name: Build and push by digest
         id: build
         if: startsWith(github.ref, 'refs/tags/')
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: ${{ matrix.platform }}
@@ -122,7 +122,7 @@ jobs:
 
       - name: Upload digest
         if: startsWith(github.ref, 'refs/tags/')
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digests-${{ steps.platform.outputs.slug }}
           path: ${{ runner.temp }}/digests/*
@@ -143,7 +143,7 @@ jobs:
       packages: read  # pull the amd64 image by digest (tag builds only)
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Prepare env and config
         run: |
@@ -160,7 +160,7 @@ jobs:
 
       - name: Log in to registry
         if: startsWith(github.ref, 'refs/tags/')
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -168,7 +168,7 @@ jobs:
 
       - name: Download the amd64 digest
         if: startsWith(github.ref, 'refs/tags/')
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: digests-linux-amd64
           path: ${{ runner.temp }}/digests
@@ -196,6 +196,9 @@ jobs:
       - name: Wait for the limesurvey container to be healthy
         run: |
           set -euo pipefail
+          # Stream container logs live alongside the polling output below; stop it once this step ends
+          docker compose logs -f --no-color &
+          trap 'kill "$!" 2>/dev/null || true' EXIT
           for i in $(seq 1 60); do
             status=$(docker inspect --format '{{.State.Health.Status}}' limesurvey 2>/dev/null || echo missing)
             echo "[$i] limesurvey health: $status"
@@ -229,7 +232,7 @@ jobs:
       packages: write  # Publish to GHCR
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0  # full history and tags for the on-main and newest-version checks
 
@@ -245,14 +248,14 @@ jobs:
           echo "Tag ${GITHUB_REF_NAME} is contained in main."
 
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*
           merge-multiple: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # Docker tags cannot contain "+", so the LimeSurvey build date suffix is mapped to "-"
       - name: Compute image tag from git tag
@@ -274,7 +277,7 @@ jobs:
 
       - name: Derive image tags
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -283,7 +286,7 @@ jobs:
             type=sha
 
       - name: Log in to registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -303,7 +306,7 @@ jobs:
       # Build the changelog and release notes
       # The export reuses the amd64 build cache from above
       - name: Export the packaged changelog
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           target: release-notes
@@ -360,7 +363,7 @@ jobs:
           } > "$notes"
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}

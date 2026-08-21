@@ -81,16 +81,24 @@ PHP_FPM_SOCKET = "/var/run/php/php-fpm.sock"
 SYSLOG_SOCKET = "/dev/log"
 
 # PHP used to detect whether the database already holds a LimeSurvey schema.
-# Reads the DB connection from config.php and exits 0 if a core table exists,
-# 1 if the database is reachable but has no schema, or 2 if it cannot be reached.
+# Reads DB connection in config.php:
+# - exits 0 if the settings_global table has DBVersion row
+# - exits 1 if the database is reachable but the table is missing or has no DBVersion row,
+# - exits 2 if it cannot be reached
 DB_SCHEMA_CHECK_PHP = r'''
 $c = require "''' + LIMESURVEY_CONFIG_DIR + r'''/config.php";
 $db = $c["components"]["db"];
 try {
     $pdo = new PDO($db["connectionString"], $db["username"], $db["password"]);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $prefix = isset($db["tablePrefix"]) ? $db["tablePrefix"] : "";
     $stmt = $pdo->prepare("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?");
     $stmt->execute([$prefix . "settings_global"]);
+    if (!$stmt->fetch()) {
+        exit(1);
+    }
+    $stmt = $pdo->prepare("SELECT 1 FROM `" . $prefix . "settings_global` WHERE stg_name = ?");
+    $stmt->execute(["DBVersion"]);
     exit($stmt->fetch() ? 0 : 1);
 } catch (Throwable $e) {
     fwrite(STDERR, $e->getMessage() . "\n");
