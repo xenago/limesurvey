@@ -1,0 +1,104 @@
+name: Update LimeSurvey
+
+# Checks for a newer LimeSurvey release, opening a pull request for LIMESURVEY_URL in the Dockerfile.
+# Runs on a schedule, and manually.
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # weekly, Monday 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Only one update run at a time; let an in-progress run finish rather than cancelling it
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: write        # push the update branch
+      pull-requests: write   # open the pull request
+    steps:
+      # Create `dev` from the default branch if it does not exist yet, so both this
+      # workflow and Dependabot (scheduled 30 min later) always have `dev` to target.
+      - name: Ensure dev branch exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh api "repos/${{ github.repository }}/branches/dev" >/dev/null 2>&1; then
+            echo "dev branch not found; creating it from ${{ github.ref_name }}."
+            sha=$(gh api "repos/${{ github.repository }}/git/ref/heads/${{ github.ref_name }}" --jq '.object.sha')
+            gh api --method POST "repos/${{ github.repository }}/git/refs" -f ref='refs/heads/dev' -f sha="$sha" >/dev/null
+          fi
+
+      - name: Checkout dev
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+
+      - name: Detect the latest LimeSurvey release
+        id: detect
+        # Tracks the latest release overall. To pin a major line instead, set LS_MAJOR in env:
+        # env:
+        #   LS_MAJOR: "7"
+        run: |
+          set -euo pipefail
+          url=$(bash ls_version_detector.sh | tail -n 1)
+          if [ -z "${url:-}" ] || ! printf '%s' "$url" | grep -q '\.zip$'; then
+            echo "No newer LimeSurvey version found."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          version=$(printf '%s' "$url" | grep -oP 'limesurvey\K[0-9]+(?:\.[0-9]+)+\+[0-9]+')
+          if grep -q "ARG LIMESURVEY_URL=$url" Dockerfile; then
+            echo "Dockerfile already at $version."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          sed -i "s|ARG LIMESURVEY_URL=.*|ARG LIMESURVEY_URL=$url|" Dockerfile
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      # Pull the newest changelog block out of the release zip and build the PR body.
+      # Written under RUNNER_TEMP so create-pull-request does not commit it.
+      - name: Build the pull request body
+        if: steps.detect.outputs.changed == 'true'
+        env:
+          URL: ${{ steps.detect.outputs.url }}
+          VERSION: ${{ steps.detect.outputs.version }}
+        run: |
+          set -euo pipefail
+          notes="${RUNNER_TEMP}/notes.txt"
+          body="${RUNNER_TEMP}/pr-body.md"
+          # Extract the newest changelog block or trigger failure 
+          bash ls_release_notes.sh "$URL" > "$notes"
+          {
+            echo "Automated update to LimeSurvey ${VERSION}."
+            echo
+            echo "<details><summary>Release notes</summary>"
+            echo
+            echo '```'
+            cat "$notes"
+            echo '```'
+            echo
+            echo "</details>"
+            echo
+            echo "Full changelog: https://github.com/LimeSurvey/LimeSurvey/blob/master/docs/release_notes.txt"
+          } > "$body"
+
+      - name: Open or update the pull request
+        if: steps.detect.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          base: dev
+          branch: limesurvey-update
+          delete-branch: true
+          commit-message: "Update LimeSurvey to ${{ steps.detect.outputs.version }}"
+          title: "Update LimeSurvey to ${{ steps.detect.outputs.version }}"
+          body-path: ${{ runner.temp }}/pr-body.md

@@ -1,0 +1,63 @@
+# Docker Compose stack for LimeSurvey. Configure via .env (see .env.example).
+#
+# By default this pulls the prebuilt image, stores data in ./data, and installs a
+# fresh database on first start. To build the image locally instead, run
+# `docker compose up -d --build`. Set LS_DATA_DIR to store data at an absolute path (for example
+# when a deploy tool overwrites this folder, keep data in a sibling directory).
+# See the README for the full fresh-install and migration steps.
+
+name: limesurvey
+
+services:
+
+  limesurvey:
+    # Pulls the prebuilt image by default.
+    # Override the tag with LIMESURVEY_IMAGE in .env, or build locally with `docker compose up -d --build`.
+    image: ${LIMESURVEY_IMAGE:-ghcr.io/xenago/limesurvey:latest}
+    pull_policy: missing
+    build: .
+    container_name: limesurvey
+    hostname: limesurvey
+    restart: always
+    depends_on:
+      limesurvey-mariadb:
+        condition: service_healthy
+    env_file: .env
+    ports:
+      - 80:80
+      # Bind to localhost if proxy server is in the same compose network stack
+      #- 127.0.0.1:80:80
+    volumes:
+      # Persistent data. Defaults to ./data beside this file; set LS_DATA_DIR for an absolute path.
+      - ${LS_DATA_DIR:-./data}/limesurvey/upload:/var/www/html/limesurvey/upload
+      - ${LS_DATA_DIR:-./data}/limesurvey/config.php:/var/www/html/limesurvey/application/config/config.php
+      - ${LS_DATA_DIR:-./data}/limesurvey/security.php:/var/www/html/limesurvey/application/config/security.php
+
+  limesurvey-mariadb:
+    # MariaDB LTS
+    image: mariadb:12.3
+    container_name: limesurvey-mariadb
+    hostname: limesurvey-mariadb
+    restart: always
+    # MARIADB_DATABASE and MARIADB_USER are read from .env (they must match config.php).
+    env_file: .env
+    environment:
+      # Fail fast if a password is unset in .env
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?copy .env.example to .env and set MARIADB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?copy .env.example to .env and set MARIADB_ROOT_PASSWORD}
+      # Allows the healthcheck to connect
+      MARIADB_MYSQL_LOCALHOST_USER: "1"
+    volumes:
+      - ${LS_DATA_DIR:-./data}/mariadb/mysql:/var/lib/mysql
+    # Bind to localhost only; the app reaches the DB over the compose network
+    ports:
+      - 127.0.0.1:3306:3306
+      # Bind externally if database must be accessed directly by an external system, e.g. for analytics
+      # Be very careful if doing this!
+      #- 3306:3306
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--su-mysql", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s

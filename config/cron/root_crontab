@@ -1,0 +1,4 @@
+MAILTO=""
+# Sessions are normally DB-backed and pruned, configured with DbHttpSession.
+# If reverted to file sessions, uncomment to re-enable file-based pruning:
+#*/15 * * * * root /bin/bash -c "find /var/lib/php/sessions -cmin +24 -type f | xargs rm"
