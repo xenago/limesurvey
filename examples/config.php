@@ -26,7 +26,8 @@ return array(
         // Database-backed sessions survive container redeployments and don't need a shared volume.
         // The sessions table is created automatically on first use.
         // Pruning is controlled by gCProbability below, and file session GC is disabled by default.
-        'session' => array(
+        // When run directly, don't use the DB sessions
+        'session' => (PHP_SAPI === 'cli') ? array() : array(
             'class' => 'application.core.web.DbHttpSession',
             'connectionID' => 'db',
             'sessionTableName' => '{{sessions}}',
@@ -39,12 +40,13 @@ return array(
             ),
         ),
 
+        // LimeSurvey 7's new question editor requires the "path" URL format
         'urlManager' => array(
             'urlFormat' => 'path',
             'rules' => array(
                 // You can add your own rules here
             ),
-            'showScriptName' => true,
+            'showScriptName' => false,
         ),
     ),
 
