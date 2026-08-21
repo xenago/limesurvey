@@ -81,12 +81,24 @@ PHP_FPM_SOCKET = "/var/run/php/php-fpm.sock"
 SYSLOG_SOCKET = "/dev/log"
 
 # PHP used to detect whether the database already holds a LimeSurvey schema.
+# BASEPATH must be defined before the require: every LimeSurvey config.php starts with
+# `if (!defined('BASEPATH')) exit('No direct script access allowed');`, and that exit() prints to
+# stdout and returns status 0, which would otherwise look like "schema present" to this check.
 # Reads DB connection in config.php:
-# - exits 0 if the settings_global table has DBVersion row
-# - exits 1 if the database is reachable but the table is missing or has no DBVersion row,
+# - exits 0 if settings_global has a DBVersion row whose value is a positive integer
+#   (mirrors UpdateDBCommand's own `if (!intval($currentDbVersion))` check, since a present-but-
+#   falsy value would otherwise pass a naive existence check yet still be rejected by updatedb)
+# - exits 1 if the database is reachable but the table is missing or DBVersion is absent/falsy
 # - exits 2 if it cannot be reached
+# Every exit path logs an "LS_DB_CHECK:" line to stderr, so the reason for the exit code shows up
+# in the container logs and the caller can tell a real result from a script that never ran.
 DB_SCHEMA_CHECK_PHP = r'''
+define("BASEPATH", "''' + LIMESURVEY_DIR + r'''");
 $c = require "''' + LIMESURVEY_CONFIG_DIR + r'''/config.php";
+if (!is_array($c) || !isset($c["components"]["db"]["connectionString"])) {
+    fwrite(STDERR, "LS_DB_CHECK: config.php did not return a database configuration\n");
+    exit(2);
+}
 $db = $c["components"]["db"];
 try {
     $pdo = new PDO($db["connectionString"], $db["username"], $db["password"]);
@@ -95,13 +107,17 @@ try {
     $stmt = $pdo->prepare("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?");
     $stmt->execute([$prefix . "settings_global"]);
     if (!$stmt->fetch()) {
+        fwrite(STDERR, "LS_DB_CHECK: settings_global table not found\n");
         exit(1);
     }
-    $stmt = $pdo->prepare("SELECT 1 FROM `" . $prefix . "settings_global` WHERE stg_name = ?");
+    $stmt = $pdo->prepare("SELECT stg_value FROM `" . $prefix . "settings_global` WHERE stg_name = ?");
     $stmt->execute(["DBVersion"]);
-    exit($stmt->fetch() ? 0 : 1);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    $dbVersion = $row ? intval($row["stg_value"]) : 0;
+    fwrite(STDERR, "LS_DB_CHECK: settings_global exists; DBVersion row " . ($row ? "= '" . $row["stg_value"] . "'" : "not found") . "\n");
+    exit($dbVersion > 0 ? 0 : 1);
 } catch (Throwable $e) {
-    fwrite(STDERR, $e->getMessage() . "\n");
+    fwrite(STDERR, "LS_DB_CHECK: " . $e->getMessage() . "\n");
     exit(2);
 }
 '''

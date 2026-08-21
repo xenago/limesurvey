@@ -183,11 +183,17 @@ def run():
     # Verify database and apply schema before starting the web server.
     # These steps run via the PHP CLI and need neither php-fpm nor nginx.
     # A failure calls short_circuit() to stop the container.
-    # Decide install vs update by checking for an existing schema, rather than inferring it from a
-    # failed update. The check exits 0 if a core table exists, 1 if the database is reachable but
-    # has no schema, or 2 if it cannot be reached.
+    # Decide install vs update by checking for a valid DBVersion, rather than inferring it from a
+    # failed update. The check exits 0 if a valid DBVersion is set, 1 if the database is reachable
+    # but is missing one (including a partially-created schema), or 2 if it cannot be reached.
     log.info("Checking database installation state...")
     check = subprocess.run(["php", "-r", statics.DB_SCHEMA_CHECK_PHP], capture_output=True, cwd=statics.LIMESURVEY_DIR, text=True)
+    log.info(f"Database installation check: returncode={check.returncode}, stdout={check.stdout.strip()}, stderr={check.stderr.strip()}")
+    if "LS_DB_CHECK" not in check.stderr:
+        # The snippet never reached one of its own exit paths, so the return code means nothing
+        # (a config.php that calls exit() before returning would leave rc=0 with no output).
+        log.error("Database installation check did not run to completion; refusing to guess at the schema state.")
+        short_circuit()
     if check.returncode == 0:
         # Existing installation: bring the schema up to date
         log.info("Running database schema update...")
