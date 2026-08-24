@@ -74,7 +74,7 @@ LIMESURVEY_UPLOAD_SKEL = "/opt/limesurvey-skel-upload"
 
 # Service config files edited at runtime from environment variables
 NGINX_SITE_CONF = "/etc/nginx/sites-enabled/limesurvey.conf"
-PHP_FPM_INI = "/etc/php/8.3/fpm/php.ini"
+PHP_FPM_INI = "/etc/php/8.4/fpm/php.ini"
 # PHP-FPM socket (defined in config/php/www.conf); init waits for it to appear
 PHP_FPM_SOCKET = "/var/run/php/php-fpm.sock"
 # Syslog socket created by rsyslog when it comes up; init waits for it to appear
