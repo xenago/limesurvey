@@ -48,6 +48,7 @@ The visibility can be set after the first tagged publish creates the package.
 ## Migrating an existing deployment
 
 If already running LimeSurvey, it can be migrated to this stack.
+That was the original purpose of this repository internally, before being cleaned up for publishing: to migrate a standalone deployment previously updated by [ls_updater](https://github.com/xenago/ls_updater).
 Two parts can be migrated: the application/files (`config.php`, `security.php`, along with the `upload` directory), and the database (optional).
 
 If the LimeSurvey container is intended to be run with an existing external database, only the file state needs to be migrated.
