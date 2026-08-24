@@ -3,8 +3,8 @@
 #
 # LimeSurvey version upgrade detector script
 #
-# - The downloads page is used instead of GitHub tags, since they lag the official releases
-# - Finds the newest LimeSurvey release listed on the downloads page and outputs the new version URL as the last line of stdout, if the current version in the Dockerfile is out of date
+# - The LimeSurvey downloads page is used instead of GitHub tags, since they lag the official releases
+# - If the version in the Dockerfile is out of date, the new version URL is output as the last line of stdout
 # - If no update is available/required, nothing is output
 # - Exit codes other than 0 indicate failure
 #

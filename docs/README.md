@@ -61,8 +61,8 @@ Notes before starting migration:
 - The existing `security.php` must be preserved. It holds the data-encryption keys, and losing them
   makes encrypted responses and participant data unrecoverable.
 
-Paths below assume the default data directory `./data` (see `LS_DATA_DIR` in the README); adjust if
-it is set elsewhere. For an [ls_updater](https://github.com/xenago/ls_updater)-managed source, the files are a standard LimeSurvey layout
+Paths below assume the default data directory `./data` (see `LS_DATA_DIR` in the README); adjust if it is set elsewhere.
+For an [ls_updater](https://github.com/xenago/ls_updater)-managed source, the files are a standard LimeSurvey layout
 under the configured `install_path`, and the database credentials are in `~/.my.cnf`.
 
 ### 1. Copy the file state
@@ -107,13 +107,13 @@ variables), then load the dump into it:
     docker compose up -d
     docker compose logs -f
 
-On startup the LimeSurvey container will detect the existing schema and run `updatedb` to bring it up
-to the image's version. The logs show the schema update; after that, log in and confirm the site works.
+On startup the LimeSurvey container will detect the existing schema and run `updatedb` to bring it up to the image's version.
+The logs show the schema update; after that, log in and confirm the site works.
 
 ### Keeping an external database
 
-To continue using the current database server, only steps 1 and 2 apply. In step 2, set the
-`config.php` host to the existing database server and keep its credentials. Remove or comment out the
-`limesurvey-mariadb` service and the `depends_on` block from `docker-compose.yml`, and skip step 3. The
-container still runs `updatedb` against the external database on start, so that database must be reachable
-from the container and its user permitted to connect from the container network.
+To continue using the current database server, only steps 1 and 2 apply.
+In step 2, set the `config.php` host to the existing database server and keep its credentials.
+Remove or comment out the `limesurvey-mariadb` service and the `depends_on` block from `docker-compose.yml`, and skip step 3.
+The container still runs `updatedb` against the external database on start;
+that database must be reachable from the container and its user permitted to connect from the container network.
