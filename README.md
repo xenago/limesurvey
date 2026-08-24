@@ -2,11 +2,12 @@
 
 Containerized build of Open Source [LimeSurvey CE](https://github.com/LimeSurvey/LimeSurvey), usable for a new deployment or to migrate an existing one. Not affiliated with [LimeSurvey](https://www.limesurvey.org/).
 
-## Components
+## Key components
 
 - LimeSurvey
 - nginx
 - PHP-FPM
+- rsyslog
 - tini
 - Supervisor
 - Debian
