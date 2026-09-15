@@ -58,12 +58,9 @@ COPY --from=limesurvey-src /opt/limesurvey/docs/release_notes.txt /release_notes
 # Stage 3: Runtime image
 
 FROM base
-# Label using OCI image labels https://github.com/opencontainers/image-spec/blob/main/annotations.md
-LABEL org.opencontainers.image.url="https://github.com/xenago/limesurvey"
-LABEL org.opencontainers.image.source="https://github.com/xenago/limesurvey"
-LABEL org.opencontainers.image.title="LimeSurvey"
-LABEL org.opencontainers.image.description="Containerized LimeSurvey"
-LABEL org.opencontainers.image.licenses="GPL-2.0-or-later"
+# OCI image labels/annotations from the GitHub repo via docker/metadata-action in .github/workflows/build.yml
+# Applied at build/push time as both per-arch labels+annotations and index annotations
+# See https://github.com/opencontainers/image-spec/blob/main/annotations.md
 
 # Set default timezone to UTC (can be overridden at runtime)
 ENV TZ=Etc/UTC
