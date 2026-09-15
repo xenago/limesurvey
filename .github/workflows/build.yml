@@ -35,17 +35,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # `platform` is a top-level matrix key so `exclude` can reference it below;
-        # `include` augments each platform with its native runner (added, not cross-producted)
-        platform: [linux/amd64, linux/arm64]
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-26.04
-          - platform: linux/arm64
-            runner: ubuntu-26.04-arm
-        # Drop amd64 on non-tag runs since the smoke test builds it; arm64 always runs
-        exclude: ${{ !startsWith(github.ref, 'refs/tags/') && fromJSON('[{"platform":"linux/amd64"}]') || fromJSON('[]') }}
-    runs-on: ${{ matrix.runner }}
+        platform: ${{ startsWith(github.ref, 'refs/tags/') && fromJSON('["linux/amd64","linux/arm64"]') || fromJSON('["linux/arm64"]') }}
+    runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-26.04' || 'ubuntu-26.04-arm' }}
     permissions:
       contents: read
       packages: write  # push image blobs by digest (tag builds only)
