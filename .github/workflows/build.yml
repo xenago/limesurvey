@@ -311,10 +311,23 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         run: |
           set -euo pipefail
-          docker buildx imagetools create \
-            $(jq -cr '.tags       | map("-t "         + (. | @sh)) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(jq -cr '.annotations | map("--annotation " + (. | @sh)) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
+          args=()
+          # Tags
+          while IFS= read -r t; do
+            args+=(-t "$t")
+          done < <(jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          # Annotations
+          # metadata-action v6 doesn't propagate the `labels:` license override to annotations
+          while IFS= read -r a; do
+            [[ "$a" == *=GPL-2.0 ]] && a="${a}-or-later"
+            args+=(--annotation "$a")
+          done < <(jq -r '.annotations[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          # Per-arch digest refs
+          # Filenames in this working dir are their sha256 hex
+          for f in *; do
+            args+=("${REGISTRY}/${IMAGE_NAME}@sha256:$f")
+          done
+          docker buildx imagetools create "${args[@]}"
 
       - name: Inspect the published image
         run: docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.imgtag.outputs.value }}
