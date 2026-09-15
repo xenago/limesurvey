@@ -1,12 +1,11 @@
 # syntax=docker/dockerfile:1
-# The above directive must be the first line
-# It enables newer Dockerfile syntax features
+# The above directive must be the first line to enable newer Dockerfile syntax
 
 ########################################################################
 
 # Stage 1: Base image prep
 # - Debian 13 'Trixie' slim: long life, includes Python 3.13
-# - Include TLS certs from equivalent Apache 'Trixie' image and enable HTTPS initially, as Debian base does not contain certs
+# - Include TLS certs from equivalent Apache 'Trixie' image to enable HTTPS initially, as Debian does not contain certs
 # - When updating base image, ensure the httpd image is kept in sync as well (until HTTPS is used by default by Debian)
 
 FROM docker.io/debian:13-slim AS base
@@ -32,7 +31,7 @@ FROM base AS limesurvey-src
 # - https://github.com/LimeSurvey/LimeSurvey/tags
 # - https://newreleases.io/github/LimeSurvey/LimeSurvey
 # Specify URL to LimeSurvey release zip file, see ls_version_detector.sh for update logic
-ARG LIMESURVEY_URL=https://download.limesurvey.org/limesurvey7.0.11+260821.zip
+ARG LIMESURVEY_URL=https://download.limesurvey.org/limesurvey7.1.1+260914.zip
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install -y --no-install-recommends unzip && \
@@ -59,12 +58,9 @@ COPY --from=limesurvey-src /opt/limesurvey/docs/release_notes.txt /release_notes
 # Stage 3: Runtime image
 
 FROM base
-# Label using OCI image labels https://github.com/opencontainers/image-spec/blob/main/annotations.md
-LABEL org.opencontainers.image.url="https://github.com/xenago/limesurvey"
-LABEL org.opencontainers.image.source="https://github.com/xenago/limesurvey"
-LABEL org.opencontainers.image.title="LimeSurvey"
-LABEL org.opencontainers.image.description="Containerized LimeSurvey"
-LABEL org.opencontainers.image.licenses="GPL-2.0-or-later"
+# OCI image labels/annotations from the GitHub repo via docker/metadata-action in .github/workflows/build.yml
+# Applied at build/push time as both per-arch labels+annotations and index annotations
+# See https://github.com/opencontainers/image-spec/blob/main/annotations.md
 
 # Set default timezone to UTC (can be overridden at runtime)
 ENV TZ=Etc/UTC
@@ -108,28 +104,28 @@ RUN apt-get update && \
       > /etc/apt/sources.list.d/php.list && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-    php8.3 \
-    php8.3-bz2 \
-    php8.3-cli \
-    php8.3-curl \
-    php8.3-fpm \
-    php8.3-gd \
-    php8.3-imap \
-    php8.3-ldap \
-    php8.3-mbstring \
-    php8.3-mysql \
-    php8.3-soap \
-    php8.3-tidy \
-    php8.3-xml \
-    php8.3-zip && \
+    php8.4 \
+    php8.4-bz2 \
+    php8.4-cli \
+    php8.4-curl \
+    php8.4-fpm \
+    php8.4-gd \
+    php8.4-imap \
+    php8.4-ldap \
+    php8.4-mbstring \
+    php8.4-mysql \
+    php8.4-soap \
+    php8.4-tidy \
+    php8.4-xml \
+    php8.4-zip && \
     apt-get autoremove -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /var/tmp/* /tmp/*
 
 # Install PHP configs
-COPY config/php/php.ini /etc/php/8.3/fpm/php.ini
-COPY config/php/php-fpm.conf  /etc/php/8.3/fpm/php-fpm.conf
-COPY config/php/www.conf /etc/php/8.3/fpm/pool.d/www.conf
+COPY config/php/php.ini /etc/php/8.4/fpm/php.ini
+COPY config/php/php-fpm.conf  /etc/php/8.4/fpm/php-fpm.conf
+COPY config/php/www.conf /etc/php/8.4/fpm/pool.d/www.conf
 # Prepare folder for PHP-FPM socket
 RUN mkdir -p /var/run/php
 

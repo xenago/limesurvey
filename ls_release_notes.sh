@@ -6,12 +6,12 @@
 # Prints the newest changelog block from a LimeSurvey release_notes.txt.
 #
 # The single argument selects the source:
-#   - a path to an existing `release_notes.txt`: read it directly
-#   - a release zip URL:                         download it and extract docs/release_notes.txt
-#   - omitted entirely:                          parse LIMESURVEY_URL from the Dockerfile to download
+#   - Path to an existing `release_notes.txt`: Read it directly
+#   - Release zip URL:                         Download it and extract docs/release_notes.txt
+#   - Omitted entirely:                        Parse LIMESURVEY_URL from the Dockerfile to download
 #
-# Exits 0 only when a changelog block is printed. Any error (a missing source, a failed download
-# or extraction, or an unparseable release_notes.txt) prints a message to stderr and exits 1.
+# Exits 0 only when a changelog block is printed.
+# Any error (e.g. missing source, failed download/extraction, unparseable notes) prints a message to stderr and exits 1.
 #
 
 # Abort on error
