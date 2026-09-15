@@ -35,6 +35,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # `platform` is a top-level matrix key so `exclude` can reference it below;
+        # `include` augments each platform with its native runner (added, not cross-producted)
+        platform: [linux/amd64, linux/arm64]
         include:
           - platform: linux/amd64
             runner: ubuntu-26.04
