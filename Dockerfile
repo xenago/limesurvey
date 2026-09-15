@@ -31,7 +31,7 @@ FROM base AS limesurvey-src
 # - https://github.com/LimeSurvey/LimeSurvey/tags
 # - https://newreleases.io/github/LimeSurvey/LimeSurvey
 # Specify URL to LimeSurvey release zip file, see ls_version_detector.sh for update logic
-ARG LIMESURVEY_URL=https://download.limesurvey.org/limesurvey7.1.0+260913.zip
+ARG LIMESURVEY_URL=https://download.limesurvey.org/limesurvey7.1.1+260914.zip
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install -y --no-install-recommends unzip && \
