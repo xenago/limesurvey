@@ -4,7 +4,7 @@ name: Update LimeSurvey
 # Runs on a schedule, and manually.
 on:
   schedule:
-    - cron: '0 6 * * 1'  # weekly, Monday 06:00 UTC
+    - cron: '0 6 * * *'  # daily, 06:00 UTC
   workflow_dispatch:
 
 permissions:
