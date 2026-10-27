@@ -103,6 +103,8 @@ jobs:
 
       # Tag push: build and push by digest (no tag applied yet)
       # oci-mediatypes=true is required for annotations to survive on the manifest through the digest-merge
+      # no-cache so every release installs current Debian and PHP packages instead of reusing stale apt layers;
+      # cache-to still runs so the merge job's changelog export can reuse this build
       - name: Build and push by digest
         id: build
         if: startsWith(github.ref, 'refs/tags/')
@@ -113,7 +115,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true,oci-mediatypes=true
-          cache-from: type=gha,scope=${{ steps.platform.outputs.slug }}
+          no-cache: true
           cache-to: type=gha,mode=max,scope=${{ steps.platform.outputs.slug }}
 
       - name: Export digest
