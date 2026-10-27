@@ -5,33 +5,66 @@ Development and release info, with incoming migration steps for an existing Lime
 ## Development and releases
 
 Automated updates land on the `dev` branch and collect there.
-A release is published by merging `dev` into `main` and pushing a version tag,
-so that a push to `main` never cuts a new release alone.
+A release is published by merging a release PR from `dev` into `main`, which tags the new
+LimeSurvey version automatically.
+A push to `main` that doesn't change the LimeSurvey version never cuts a new release alone.
 
 ### Workflows
 
-- `update-limesurvey.yml` runs weekly (Monday 06:00 UTC). It creates `dev` from the default
+- `update-limesurvey.yml` runs daily at 06:00 UTC. It creates `dev` from the default
   branch if missing, detects the newest LimeSurvey release with `ls_version_detector.sh`, and
   opens a pull request bumping `LIMESURVEY_URL` in the Dockerfile against `dev`. Set `LS_MAJOR`
   in that workflow to track a single major line instead of the latest release overall.
 - Dependabot runs 30 minutes afterwards, and opens Docker and GitHub Actions updates against `dev`.
+- `release-pr.yml` opens or updates a pull request from `dev` to `main` whenever `dev` changes
+- `tag-release.yml` tags `main` with the LimeSurvey version from the Dockerfile if that tag doesn't exist yet, and starts the release build
 - `build.yml` builds the image natively for `linux/amd64` and `linux/arm64` and smoke-tests the
   stack
 - PRs into `dev` and manual runs validate the build and smoke test only
 - A semver tag pushed to `main` builds, tests, pushes, and publishes a release
 
-### Initial repository setup
+### Initial GitHub repository setup
 
 - Enable `Allow GitHub Actions to create and approve pull requests` under
-  `Settings > Actions > General > Workflow permissions` so the update workflow can open PRs.
+  `Settings > Actions > General > Workflow permissions` so the update and release PR workflows can open PRs.
+- Enable `Automatically delete head branches` and `Allow auto-merge` under `Settings > General`.
+- Add the rulesets described in [Branch and tag rules](#branch-and-tag-rules).
 - Enable Dependabot alerts and security updates under `Settings > Advanced security`.
 - Enable `Private vulnerability reporting` under `Settings > Advanced Security` for the [SECURITY.md](SECURITY.md) process.
 
+### Branch and tag rules
+
+Configured in GitHub under `Settings > Rules > Rulesets`.
+
+`main`: branch ruleset targeting the default branch
+
+- Bypass list: `Repository admin`, set to `Always`, for urgent direct pushes
+- `Restrict deletions`, `Block force pushes`, and `Require linear history`
+- `Require a pull request before merging` with 0 approvals and `Squash` as the only allowed merge method
+- No required status checks, since `build.yml` only runs on pull requests into `dev`
+
+`dev`: branch ruleset targeting `dev`, so auto-merge waits for the test build
+
+- `Block force pushes`
+- `Restrict deletions` unchecked since `dev` is deleted after every release
+- `Require status checks to pass` with `build (linux/arm64)`/`smoke`, and `Do not require status checks on creation` checked so the update workflow can recreate `dev`
+
+Release tags: tag ruleset (targeting all tags)
+
+- Bypass list: `Repository admin`, set to `Always`, so tags can be moved for a
+  [re-release](#re-releasing-a-version).
+- `Restrict updates`, `Restrict deletions`, and `Block force pushes`.
+- `Restrict creations` unchecked: `tag-release.yml` creates the tags.
+
 ### Cutting a release
 
-1. Prepare a stable commit on `dev`
-2. Merge from `dev` to `main`
-3. Tag the release commit with the LimeSurvey version and push the tag:
+1. Prepare a stable commit on `dev`:
+   approve the workflow run on the update PR, then squash and merge it once the build and smoke test pass, or enable auto-merge after approving
+2. Merge from `dev` to `main`:
+   squash and merge the PR opened by `release-pr.yml`, then delete `dev`,
+   since the squash leaves it out of sync with `main` (the update workflow recreates it).
+   Merge or close other PRs into `dev` first, or GitHub retargets them to `main`
+3. Tag the release commit with the LimeSurvey version and push the tag (`tag-release.yml` does this automatically):
 
        git tag 7.0.11+260821
        git push origin 7.0.11+260821
@@ -44,6 +77,17 @@ A GitHub Release is created for the tag with the image pull commands and the pac
 
 The image in this repo publishes to `ghcr.io/xenago/limesurvey` using the built-in `GITHUB_TOKEN`.
 The visibility can be set after the first tagged publish creates the package.
+
+### Re-releasing a version
+
+To publish a change without a new LimeSurvey version (for example o update libraries or configs), move the existing tag to the new `main` commit:
+
+    git push origin :refs/tags/7.0.11+260821
+    git tag -f 7.0.11+260821
+    git push origin 7.0.11+260821
+
+Release builds skip the build cache, so re-running a release build picks up current Debian and PHP
+packages.
 
 ## Migrating an existing deployment
 
