@@ -291,9 +291,10 @@ jobs:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # The first tag sets the version annotation
           tags: |
-            type=raw,value=latest,enable=${{ steps.latest.outputs.is_latest == 'true' }}
             type=raw,value=${{ steps.imgtag.outputs.value }}
+            type=raw,value=latest,enable=${{ steps.latest.outputs.is_latest == 'true' }}
             type=sha
           labels: |
             org.opencontainers.image.licenses=GPL-2.0-or-later
