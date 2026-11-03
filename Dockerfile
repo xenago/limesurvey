@@ -7,16 +7,27 @@
 # - Debian 13 'Trixie' slim: long life, includes Python 3.13
 # - Include TLS certs from equivalent Apache 'Trixie' image to enable HTTPS initially, as Debian does not contain certs
 # - When updating base image, ensure the httpd image is kept in sync as well (until HTTPS is used by default by Debian)
+# - The httpd image is defined in its own stage for dependabot compatibility
 
+FROM docker.io/httpd:trixie AS certs
 FROM docker.io/debian:13-slim AS base
-COPY --from=docker.io/httpd:trixie /etc/ssl /etc/ssl
-COPY --from=docker.io/httpd:trixie /lib/ssl /lib/ssl
+COPY --from=certs /etc/ssl /etc/ssl
+# Debian 13 apt relies on OpenSSL, which locates certs using /usr/lib/ssl
+COPY --from=certs /lib/ssl /lib/ssl
 ARG DEBIAN_FRONTEND=noninteractive
+ARG DEBCONF_NOWARNINGS="yes"
 RUN sed -i 's|http://|https://|g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && \
-    apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends ca-certificates curl && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get upgrade -y --option=Dpkg::Options::=--force-confdef && \
+    apt-get install -y --no-install-recommends --option=Dpkg::Options::=--force-confdef ca-certificates curl && \
+    apt-get autoremove -y && \
+    apt-get clean -y && \
+    rm -rf /lib/systemd && \
+    rm -rf /tmp/* && \
+    rm -rf /var/cache/apt/archives/* && \
+    rm -rf /var/lib/apt/lists/* && \
+    rm -rf /var/log/* && \
+    rm -rf /var/tmp/*
 
 ########################################################################
 
@@ -73,7 +84,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG DEBCONF_NOWARNINGS="yes"
-# Install base packages, then PHP (PPA/PHP/extensions), and then clear out apt cruft
+# Install base packages, then PHP (PPA/PHP/extensions), and then clear out apt cruft, logs, temp files, systemd units and nginx defaults
 # Debian developer Sury publishes this PPA because the OS only includes a single specific version normally
 # See https://deb.sury.org/
 # See docs: https://www.limesurvey.org/manual/Installation_-_LimeSurvey_CE#Make_sure_you_can_use_LimeSurvey_on_your_website
@@ -87,15 +98,22 @@ ARG DEBCONF_NOWARNINGS="yes"
 # - python3             (System-provided Python used by init)
 # - rsyslog             (Log management with syslog)
 # - supervisor          (Service manager)
+# - systemd-standalone-sysusers, systemd-standalone-tmpfiles
+#                       (Provide `systemd-sysusers` for cron and `systemd-tmpfiles` for PHP-FPM, so apt doesn't install all of systemd)
 # - tini                (Init/PID 1)
+# nginx opens its default error log before reading its config, so the log directory must exist
+# Recreate the nginx log directory and prepare the folder for the PHP-FPM socket
+# Clean up nginx default files
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+    apt-get install -y --no-install-recommends --option=Dpkg::Options::=--force-confdef \
     cron \
     locales \
     nginx \
     python3 \
     rsyslog \
     supervisor \
+    systemd-standalone-sysusers \
+    systemd-standalone-tmpfiles \
     tini && \
     curl -fsSLo /tmp/debsuryorg-archive-keyring.deb https://packages.sury.org/debsuryorg-archive-keyring.deb && \
     dpkg -i /tmp/debsuryorg-archive-keyring.deb && \
@@ -103,7 +121,7 @@ RUN apt-get update && \
     echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ $(. /etc/os-release && echo $VERSION_CODENAME) main" \
       > /etc/apt/sources.list.d/php.list && \
     apt-get update && \
-    apt-get install -y --no-install-recommends \
+    apt-get install -y --no-install-recommends --option=Dpkg::Options::=--force-confdef \
     php8.4 \
     php8.4-bz2 \
     php8.4-cli \
@@ -119,15 +137,24 @@ RUN apt-get update && \
     php8.4-xml \
     php8.4-zip && \
     apt-get autoremove -y && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /var/tmp/* /tmp/*
+    apt-get clean -y && \
+    rm /etc/nginx/nginx.conf && \
+    rm -rf /etc/nginx/sites-available && \
+    rm /etc/nginx/sites-enabled/default && \
+    rm -rf /var/www/html/* && \
+    rm -rf /lib/systemd && \
+    rm -rf /tmp/* && \
+    rm -rf /var/cache/apt/archives/* && \
+    rm -rf /var/lib/apt/lists/* && \
+    rm -rf /var/log/* && \
+    rm -rf /var/tmp/* && \
+    mkdir /var/log/nginx && \
+    mkdir -p /var/run/php
 
 # Install PHP configs
 COPY config/php/php.ini /etc/php/8.4/fpm/php.ini
 COPY config/php/php-fpm.conf  /etc/php/8.4/fpm/php-fpm.conf
 COPY config/php/www.conf /etc/php/8.4/fpm/pool.d/www.conf
-# Prepare folder for PHP-FPM socket
-RUN mkdir -p /var/run/php
 
 # Create directories, import container-specific code
 COPY app/ /app
@@ -146,11 +173,6 @@ COPY config/cron/root_crontab /tmp/root_crontab
 RUN crontab -u root /tmp/root_crontab && \
     rm /tmp/root_crontab
 
-# Clean up nginx default files
-RUN rm /etc/nginx/nginx.conf && \
-    rm -rf /etc/nginx/sites-available && \
-    rm /etc/nginx/sites-enabled/default && \
-    rm -rf /var/www/html/*
 # Import nginx configs
 COPY config/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY config/nginx/limesurvey.conf /etc/nginx/sites-enabled/limesurvey.conf
