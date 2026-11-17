@@ -121,3 +121,13 @@ try {
     exit(2);
 }
 '''
+
+# PHP that runs `console.php install` with the initial admin account read from the environment, so
+# the password is not visible in the process list. console.php reads $argv, and Yii's command runner
+# reads $_SERVER["argv"].
+INSTALL_FROM_ENV_PHP = r'''
+$argv = $_SERVER["argv"] = ["console.php", "install",
+    getenv("LS_ADMIN_USER"), getenv("LS_ADMIN_PASSWORD"), getenv("LS_ADMIN_NAME"), getenv("LS_ADMIN_EMAIL")];
+$_SERVER["argc"] = count($argv);
+require "application/commands/console.php";
+'''
