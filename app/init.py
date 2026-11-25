@@ -1,7 +1,11 @@
 import copy
+import grp
+import ipaddress
 import logging
 import logging.handlers
 import os
+import pwd
+import re
 import subprocess
 import time
 
@@ -87,6 +91,23 @@ def run_or_fail(cmd, description):
     return result
 
 
+def set_owner_and_mode(path, mode=None):
+    """Give a path to nobody:www-data, stopping the container via short_circuit() on failure.
+    Without a mode, add rwX for user and group and remove all access for others, like `chmod u+rwX,g+rwX,o-rwx`.
+    """
+    try:
+        os.chown(path, pwd.getpwnam("nobody").pw_uid, grp.getgrnam("www-data").gr_gid)
+        if mode is None:
+            current = os.stat(path).st_mode
+            # X: execute only for directories and files that are already executable
+            execute = 0o110 if os.path.isdir(path) or current & 0o111 else 0
+            mode = (current & 0o7770) | 0o660 | execute
+        os.chmod(path, mode)
+    except (KeyError, OSError) as e:
+        log.error(f"Setting ownership and permissions on {path} failed: {e}")
+        short_circuit()
+
+
 def configure_logging():
     """Attach the log handler
     """
@@ -137,6 +158,12 @@ def run():
     if "LS_PROXY_IP" in env and len(env["LS_PROXY_IP"].strip()) > 0:
         ls_nginx_file = statics.NGINX_SITE_CONF
         ls_proxy_ip = env["LS_PROXY_IP"].strip()
+        # Only an IP address or CIDR can reach the nginx config
+        try:
+            ipaddress.ip_network(ls_proxy_ip, strict=False)
+        except ValueError:
+            print(f"Error: invalid LS_PROXY_IP `{ls_proxy_ip}`, expected an IP address or CIDR")
+            short_circuit()
         print(f"Applying `LS_PROXY_IP={ls_proxy_ip}` in `{ls_nginx_file}`")
         with open(ls_nginx_file, 'r') as f:
             file_contents = f.read()
@@ -148,6 +175,10 @@ def run():
     if "TZ" in env and len(env["TZ"].strip()) > 0:
         ls_php_file = statics.PHP_FPM_INI
         ls_tz = env["TZ"].strip()
+        # Time zone names only, so nothing else can reach php.ini
+        if not re.fullmatch(r"[A-Za-z0-9_+\-/]+", ls_tz):
+            print(f"Error: invalid TZ `{ls_tz}`")
+            short_circuit()
         print(f"Applying `TZ={ls_tz}` in `{ls_php_file}`")
         with open(ls_php_file, 'r') as f:
             file_contents = f.read()
@@ -172,13 +203,11 @@ def run():
         run_or_fail(["cp", "-a", upload_skel + "/.", upload_dir], "Seeding the upload directory")
     # config.php is only read at runtime: group-readable for the web user, never world-readable
     if os.path.exists(ls_config + "/config.php"):
-        run_or_fail(["chown", "nobody:www-data", ls_config + "/config.php"], "Setting ownership on config.php")
-        run_or_fail(["chmod", "u=rw,g=r,o=", ls_config + "/config.php"], "Setting permissions on config.php")
+        set_owner_and_mode(ls_config + "/config.php", 0o640)
     # upload (survey files) and security.php (generated encryption keys) must be writable by www-data
     for path in (upload_dir, ls_config + "/security.php"):
         if os.path.exists(path):
-            run_or_fail(["chown", "nobody:www-data", path], f"Setting ownership on {path}")
-            run_or_fail(["chmod", "u+rwX,g+rwX,o-rwx", path], f"Setting permissions on {path}")
+            set_owner_and_mode(path)
 
     # Verify database and apply schema before starting the web server.
     # These steps run via the PHP CLI and need neither php-fpm nor nginx.
@@ -205,8 +234,9 @@ def run():
     elif check.returncode == 1 and env["LS_ADMIN_PASSWORD"].strip():
         # Reachable but empty, with admin credentials supplied: install the schema and initial admin
         log.info("Database reachable but empty; creating schema and initial admin account...")
-        p = subprocess.run(["php", "-d", "memory_limit=-1", "application/commands/console.php", "install", env["LS_ADMIN_USER"], env["LS_ADMIN_PASSWORD"], env["LS_ADMIN_NAME"], env["LS_ADMIN_EMAIL"]], capture_output=True, cwd=statics.LIMESURVEY_DIR, text=True)
-        # Log fields individually: the CompletedProcess repr would include the admin password in its args
+        # The credentials go through the environment, not the command line, which every process can read
+        admin_env = {key: env[key] for key in ("LS_ADMIN_USER", "LS_ADMIN_PASSWORD", "LS_ADMIN_NAME", "LS_ADMIN_EMAIL")}
+        p = subprocess.run(["php", "-d", "memory_limit=-1", "-r", statics.INSTALL_FROM_ENV_PHP], capture_output=True, cwd=statics.LIMESURVEY_DIR, env={**os.environ, **admin_env}, text=True)
         log.info(f"Ran install: returncode={p.returncode}, stdout={p.stdout}, stderr={p.stderr}")
         if p.returncode != 0:
             log.error("Database install failed.")
